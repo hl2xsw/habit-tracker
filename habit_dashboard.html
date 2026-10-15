@@ -1,0 +1,1450 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>일일 습관 & 캘린더 대시보드</title>
+  
+  <!-- 모바일 웹앱(PWA) 설정 -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="습관 대시보드">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#4f46e5">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+    body { 
+      font-family: 'Pretendard', sans-serif; 
+      background-color: #f8fafc; 
+      -webkit-tap-highlight-color: transparent;
+    }
+    .check-btn { transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1); }
+    .check-btn:active { transform: scale(0.88); }
+    .dragging { opacity: 0.4; background-color: #e0e7ff !important; }
+    .drag-over { border-top: 2px solid #4f46e5 !important; }
+    .cal-day { transition: all 0.15s ease; }
+    .cal-day:active { transform: scale(0.95); }
+    /* 모바일 가로 스크롤바 부드럽게 */
+    .smooth-scroll { -webkit-overflow-scrolling: touch; }
+  </style>
+</head>
+<body class="text-slate-800 p-3 sm:p-5 md:p-8 pb-16">
+
+  <div class="max-w-6xl mx-auto space-y-5 md:space-y-6">
+    
+    <!-- 1. 헤더 영역 -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200">
+      <div class="flex items-start justify-between">
+        <div>
+          <h1 class="text-xl sm:text-2xl font-bold text-slate-900 flex items-center gap-2">
+            <i class="fa-solid fa-fire-flame-curved text-orange-500"></i>
+            습관 관리 대시보드
+          </h1>
+          <p id="current-date-display" class="text-slate-500 text-xs sm:text-sm mt-1"></p>
+        </div>
+        <!-- 클라우드 상태 배지 (모바일 우측 상단 표시) -->
+        <span id="sync-status-badge" onclick="openSyncModal()" class="md:hidden cursor-pointer px-2.5 py-1 text-[11px] font-semibold rounded-full bg-slate-100 text-slate-600 flex items-center gap-1">
+          <i class="fa-solid fa-cloud"></i> 로컬 저장중
+        </span>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <button onclick="goToToday()" class="flex-1 sm:flex-none px-3.5 py-2 text-xs sm:text-sm font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition text-center">
+          <i class="fa-solid fa-location-crosshairs mr-1"></i> 오늘로 이동
+        </button>
+        <button onclick="openSyncModal()" class="flex-1 sm:flex-none px-3.5 py-2 text-xs sm:text-sm font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition text-center flex items-center justify-center gap-1.5">
+          <i class="fa-brands fa-github"></i> <span id="sync-btn-text">동기화 / 백업</span>
+        </button>
+        <button onclick="resetSelectedWeek()" class="px-3.5 py-2 text-xs sm:text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition">
+          <i class="fa-solid fa-rotate-right mr-1"></i> 주간 초기화
+        </button>
+      </div>
+    </div>
+
+    <!-- 2. 상단 요약 카드 (KPI - 모바일에서는 3열 컴팩트 배치) -->
+    <div class="grid grid-cols-3 gap-2.5 sm:gap-4">
+      <!-- 오늘의 달성률 -->
+      <div class="bg-white p-3.5 sm:p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between">
+        <div>
+          <p class="text-[11px] sm:text-sm font-medium text-slate-500">오늘 달성</p>
+          <div class="flex flex-col sm:flex-row sm:items-baseline sm:gap-2 mt-0.5 sm:mt-1">
+            <span id="today-rate" class="text-xl sm:text-3xl font-extrabold text-indigo-600">0%</span>
+            <span id="today-count" class="text-[10px] sm:text-xs text-slate-400">(0/0)</span>
+          </div>
+        </div>
+        <div class="hidden sm:flex w-11 h-11 rounded-full bg-indigo-50 items-center justify-center text-indigo-600 text-lg shrink-0">
+          <i class="fa-solid fa-calendar-check"></i>
+        </div>
+      </div>
+
+      <!-- 주간 전체 달성률 -->
+      <div class="bg-white p-3.5 sm:p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between">
+        <div>
+          <p class="text-[11px] sm:text-sm font-medium text-slate-500" id="weekly-kpi-title">주간 달성</p>
+          <div class="flex flex-col sm:flex-row sm:items-baseline sm:gap-2 mt-0.5 sm:mt-1">
+            <span id="weekly-rate" class="text-xl sm:text-3xl font-extrabold text-emerald-600">0%</span>
+            <span id="weekly-count" class="text-[10px] sm:text-xs text-slate-400">(0/0)</span>
+          </div>
+        </div>
+        <div class="hidden sm:flex w-11 h-11 rounded-full bg-emerald-50 items-center justify-center text-emerald-600 text-lg shrink-0">
+          <i class="fa-solid fa-chart-pie"></i>
+        </div>
+      </div>
+
+      <!-- 최고 연속 달성 -->
+      <div class="bg-white p-3.5 sm:p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between">
+        <div class="min-w-0">
+          <p class="text-[11px] sm:text-sm font-medium text-slate-500">최고 스트릭</p>
+          <div class="flex flex-col sm:flex-row sm:items-baseline sm:gap-2 mt-0.5 sm:mt-1">
+            <span id="best-streak" class="text-xl sm:text-3xl font-extrabold text-orange-500">0회</span>
+            <span id="best-habit-name" class="text-[10px] sm:text-xs text-slate-400 truncate max-w-[85px] sm:max-w-[130px]">기록 없음</span>
+          </div>
+        </div>
+        <div class="hidden sm:flex w-11 h-11 rounded-full bg-orange-50 items-center justify-center text-orange-500 text-lg shrink-0">
+          <i class="fa-solid fa-trophy"></i>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. 월간 캘린더 & 선택 날짜 루틴 편집 영역 -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 md:gap-6">
+      
+      <!-- 좌측: 월간 캘린더 (7칸) -->
+      <div class="lg:col-span-7 bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between mb-3 sm:mb-4">
+            <h2 class="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+              <i class="fa-regular fa-calendar-days text-indigo-600"></i>
+              월간 루틴 캘린더
+            </h2>
+            <div class="flex items-center gap-1.5 sm:gap-2">
+              <button onclick="changeCalendarMonth(-1)" class="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-100 active:bg-slate-200 transition">
+                <i class="fa-solid fa-chevron-left text-xs"></i>
+              </button>
+              <span id="calendar-month-title" class="text-xs sm:text-sm font-bold text-slate-800 min-w-[85px] text-center"></span>
+              <button onclick="changeCalendarMonth(1)" class="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-100 active:bg-slate-200 transition">
+                <i class="fa-solid fa-chevron-right text-xs"></i>
+              </button>
+            </div>
+          </div>
+
+          <p class="text-[11px] sm:text-xs text-slate-400 mb-3">
+            * 날짜를 터치하면 해당 일자의 루틴 달성 기록을 수정하거나 당일 루틴을 제외할 수 있습니다.
+          </p>
+
+          <!-- 요일 헤더 (일~토) -->
+          <div class="grid grid-cols-7 gap-1 sm:gap-1.5 text-center text-xs font-semibold text-slate-400 pb-2">
+            <div class="text-rose-500">일</div>
+            <div>월</div>
+            <div>화</div>
+            <div>수</div>
+            <div>목</div>
+            <div>금</div>
+            <div class="text-blue-500">토</div>
+          </div>
+
+          <!-- 날짜 그리드 -->
+          <div id="calendar-grid" class="grid grid-cols-7 gap-1 sm:gap-1.5">
+            <!-- JS 렌더링 -->
+          </div>
+        </div>
+
+        <!-- 범례 -->
+        <div class="mt-4 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
+          <div class="flex items-center gap-2.5 sm:gap-3">
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-slate-100 border border-slate-200 inline-block"></span> 0%</span>
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-indigo-100 border border-indigo-200 inline-block"></span> 진행중</span>
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-emerald-500 inline-block"></span> 100% 완료</span>
+          </div>
+          <span class="text-slate-400">선택됨: 보라색 테두리</span>
+        </div>
+      </div>
+
+      <!-- 우측: 선택한 날짜의 루틴 기록 수정 패널 (5칸 - 스마트폰에서 가장 많이 쓰는 영역) -->
+      <div class="lg:col-span-5 bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3.5 mb-3.5">
+            <div>
+              <span class="text-[11px] font-semibold text-indigo-600 uppercase tracking-wider">선택한 날짜 루틴 체크/수정</span>
+              <h3 id="selected-date-title" class="text-base sm:text-lg font-bold text-slate-900 mt-0.5"></h3>
+            </div>
+            <div id="selected-date-badge" class="px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-600 shrink-0">
+              0 / 0 완료
+            </div>
+          </div>
+
+          <!-- 일괄 체크/해제 버튼 -->
+          <div class="flex gap-2 mb-3.5">
+            <button onclick="batchToggleSelectedDate(true)" class="flex-1 py-2.5 px-3 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 border border-emerald-200 rounded-xl transition flex items-center justify-center gap-1.5">
+              <i class="fa-solid fa-check-double"></i> 모두 완료
+            </button>
+            <button onclick="batchToggleSelectedDate(false)" class="flex-1 py-2.5 px-3 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 rounded-xl transition flex items-center justify-center gap-1.5">
+              <i class="fa-solid fa-eraser"></i> 모두 해제
+            </button>
+          </div>
+
+          <!-- 선택 날짜의 습관 리스트 -->
+          <div id="selected-date-list" class="space-y-2 max-h-[360px] overflow-y-auto pr-0.5">
+            <!-- JS 렌더링 -->
+          </div>
+        </div>
+
+        <div class="mt-4 pt-3 border-t border-slate-100 text-[11px] text-slate-400 flex items-center justify-between">
+          <span><i class="fa-solid fa-mobile-screen-button mr-1"></i> 스마트폰에서는 이 패널로 간편하게 당일 체크/삭제를 할 수 있습니다.</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 4. 새 습관 추가 폼 (주중/주말/매일 선택 포함) -->
+    <div class="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200">
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-2.5 px-1">
+        <span class="text-xs sm:text-sm font-bold text-slate-800 flex items-center gap-1.5">
+          <i class="fa-solid fa-circle-plus text-indigo-600"></i> 새로운 일일 목표 등록
+        </span>
+        <span class="text-[11px] text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full font-medium">
+          * 오늘부터 적용 (과거 날짜 제외)
+        </span>
+      </div>
+      <form id="add-habit-form" class="flex flex-col md:flex-row gap-2.5 sm:gap-3">
+        <div class="grid grid-cols-2 sm:flex gap-2">
+          <select id="habit-category" class="px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="운동">💪 운동/건강</option>
+            <option value="학습">📚 학습/개발</option>
+            <option value="생활">🌿 생활/루틴</option>
+            <option value="취미">⛳ 취미/여가</option>
+          </select>
+          <select id="habit-frequency" class="px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="daily">📅 매일 (월~일)</option>
+            <option value="weekdays">💼 주중 (월~금)</option>
+            <option value="weekends">🏖️ 주말 (토·일)</option>
+          </select>
+        </div>
+        <input type="text" id="habit-input" placeholder="새로운 목표를 입력하세요 (예: 퍼팅 매트 연습 20분)" required
+          class="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        <button type="submit" class="py-2.5 px-6 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold text-sm rounded-xl transition flex items-center justify-center gap-2 shrink-0">
+          <i class="fa-solid fa-plus"></i> 오늘부터 목표 추가
+        </button>
+      </form>
+    </div>
+
+    <!-- 5. 맨 아래: 주간 습관 체크 매트릭스 -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+      <!-- 주간 네비게이션 바 -->
+      <div class="px-4 sm:px-6 py-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/40">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="font-bold text-slate-800 text-sm sm:text-base">주간 루틴 체크표 & 순서 관리</span>
+          <span id="week-range-label" class="text-[11px] sm:text-xs font-semibold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-lg"></span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <button onclick="changeWeek(-1)" class="flex-1 sm:flex-none px-3 py-1.5 text-xs font-semibold bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg transition shadow-sm">
+            <i class="fa-solid fa-chevron-left mr-1"></i> 지난주
+          </button>
+          <button onclick="goToToday()" class="flex-1 sm:flex-none px-3 py-1.5 text-xs font-semibold bg-white border border-slate-200 hover:bg-slate-50 text-indigo-600 rounded-lg transition shadow-sm">
+            이번 주
+          </button>
+          <button onclick="changeWeek(1)" class="flex-1 sm:flex-none px-3 py-1.5 text-xs font-semibold bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg transition shadow-sm">
+            다음 주 <i class="fa-solid fa-chevron-right ml-1"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto smooth-scroll">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="border-b border-slate-200 bg-slate-50/60 text-xs font-semibold text-slate-500 uppercase">
+              <th class="py-3.5 pl-3 pr-1 w-7 text-center hidden sm:table-cell" title="드래그하여 순서 변경"><i class="fa-solid fa-arrows-up-down"></i></th>
+              <th class="py-3.5 px-3 min-w-[220px] sm:min-w-[250px]">목표 항목</th>
+              <th class="py-3.5 px-1 text-center w-12 sm:w-14" id="day-header-0">월</th>
+              <th class="py-3.5 px-1 text-center w-12 sm:w-14" id="day-header-1">화</th>
+              <th class="py-3.5 px-1 text-center w-12 sm:w-14" id="day-header-2">수</th>
+              <th class="py-3.5 px-1 text-center w-12 sm:w-14" id="day-header-3">목</th>
+              <th class="py-3.5 px-1 text-center w-12 sm:w-14" id="day-header-4">금</th>
+              <th class="py-3.5 px-1 text-center w-12 sm:w-14 text-blue-500" id="day-header-5">토</th>
+              <th class="py-3.5 px-1 text-center w-12 sm:w-14 text-rose-500" id="day-header-6">일</th>
+              <th class="py-3.5 px-2 text-center w-16 sm:w-20">스트릭</th>
+              <th class="py-3.5 px-2 text-center w-24 sm:w-28">진행도</th>
+              <th class="py-3.5 px-3 text-center w-28 sm:w-32">이동/수정/삭제</th>
+            </tr>
+          </thead>
+          <tbody id="habit-tbody" class="divide-y divide-slate-100 text-sm">
+            <!-- 자바스크립트로 렌더링 -->
+          </tbody>
+        </table>
+      </div>
+      
+      <!-- 빈 상태 안내 -->
+      <div id="empty-state" class="hidden py-12 text-center text-slate-400">
+        <i class="fa-regular fa-clipboard text-4xl mb-3"></i>
+        <p class="text-sm">이 주간에 활성화된 일일 목표가 없습니다.</p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 모달 1: 삭제 방식 선택 모달 -->
+  <div id="delete-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs hidden items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-xl border border-slate-200 space-y-4">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <span class="text-xs font-bold text-rose-500 uppercase">목표 삭제 옵션</span>
+          <h3 class="text-base sm:text-lg font-bold text-slate-900 mt-0.5" id="delete-modal-title">삭제 방식을 선택해 주세요</h3>
+        </div>
+        <button onclick="closeDeleteModal()" class="text-slate-400 hover:text-slate-600 p-1">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <p class="text-xs text-slate-500 leading-relaxed" id="delete-modal-desc"></p>
+
+      <div class="space-y-2.5">
+        <button onclick="confirmDeleteOption('single')" class="w-full p-3.5 text-left rounded-xl border border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/50 transition flex items-center gap-3.5 group">
+          <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white flex items-center justify-center shrink-0 transition">
+            <i class="fa-regular fa-calendar-xmark"></i>
+          </div>
+          <div>
+            <div class="text-sm font-bold text-slate-800" id="delete-opt-single-title">당일만 삭제</div>
+            <div class="text-xs text-slate-500 mt-0.5" id="delete-opt-single-desc">선택한 날짜 하루만 이 루틴을 목록에서 제외합니다.</div>
+          </div>
+        </button>
+
+        <button onclick="confirmDeleteOption('fromToday')" class="w-full p-3.5 text-left rounded-xl border border-slate-200 hover:border-amber-500 hover:bg-amber-50/50 transition flex items-center gap-3.5 group">
+          <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 group-hover:bg-amber-500 group-hover:text-white flex items-center justify-center shrink-0 transition">
+            <i class="fa-solid fa-calendar-minus"></i>
+          </div>
+          <div>
+            <div class="text-sm font-bold text-slate-800">오늘부터 삭제 (과거 기록 유지)</div>
+            <div class="text-xs text-slate-500 mt-0.5">어제까지의 기록은 남겨두고, 오늘부터 앞으로의 루틴만 종료합니다.</div>
+          </div>
+        </button>
+
+        <button onclick="confirmDeleteOption('all')" class="w-full p-3.5 text-left rounded-xl border border-slate-200 hover:border-rose-500 hover:bg-rose-50/50 transition flex items-center gap-3.5 group">
+          <div class="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 group-hover:bg-rose-600 group-hover:text-white flex items-center justify-center shrink-0 transition">
+            <i class="fa-solid fa-trash-can"></i>
+          </div>
+          <div>
+            <div class="text-sm font-bold text-rose-600">전체 완전 삭제</div>
+            <div class="text-xs text-slate-500 mt-0.5">과거의 모든 달성 기록을 포함해 이 목표를 완전히 삭제합니다.</div>
+          </div>
+        </button>
+      </div>
+
+      <div class="pt-1 flex justify-end">
+        <button onclick="closeDeleteModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition">
+          취소
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 모달 2: GitHub 클라우드 동기화 및 파일 백업 모달 -->
+  <div id="sync-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs hidden items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-xl border border-slate-200 space-y-5 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+        <div>
+          <span class="text-xs font-bold text-emerald-600 uppercase">스마트폰 ↔ PC 데이터 연동</span>
+          <h3 class="text-lg font-bold text-slate-900 mt-0.5">GitHub 클라우드 동기화 & 파일 백업</h3>
+        </div>
+        <button onclick="closeSyncModal()" class="text-slate-400 hover:text-slate-600 p-1">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- 섹션 A: GitHub Gist 자동 동기화 설정 -->
+      <div class="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200/80">
+        <div class="flex items-center justify-between">
+          <h4 class="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+            <i class="fa-brands fa-github text-base"></i> GitHub Gist 클라우드 동기화 (선택)
+          </h4>
+          <span id="modal-sync-indicator" class="text-[11px] font-semibold px-2 py-0.5 rounded bg-slate-200 text-slate-600">미연결</span>
+        </div>
+        <p class="text-xs text-slate-500 leading-relaxed">
+          GitHub의 <b>Personal Access Token (classic, <code>gist</code> 권한 체크)</b>을 입력하면 내 비공개 Gist에 데이터가 자동 저장되어 스마트폰과 PC에서 똑같은 데이터를 실시간으로 쓸 수 있습니다.
+        </p>
+
+        <div class="space-y-2">
+          <div>
+            <label class="text-xs font-semibold text-slate-600 block mb-1">1. GitHub Personal Access Token</label>
+            <input type="password" id="github-token-input" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" 
+              class="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-slate-600 block mb-1">2. Gist ID <span class="font-normal text-slate-400">(비워두면 '새로 생성' 시 자동 입력됨)</span></label>
+            <input type="text" id="github-gist-input" placeholder="기존 Gist ID가 있다면 입력, 처음이면 비워두세요" 
+              class="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          </div>
+        </div>
+
+        <div class="flex flex-wrap gap-2 pt-1">
+          <button onclick="saveAndCreateGist()" class="flex-1 py-2 px-3 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition">
+            <i class="fa-solid fa-cloud-arrow-up mr-1"></i> 클라우드에 현재 데이터 저장 (연결)
+          </button>
+          <button onclick="pullFromGist()" class="flex-1 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition">
+            <i class="fa-solid fa-cloud-arrow-down mr-1"></i> 클라우드에서 불러오기
+          </button>
+        </div>
+        <p id="sync-log-msg" class="text-[11px] text-indigo-600 font-medium hidden"></p>
+      </div>
+
+      <!-- 섹션 B: 파일로 내보내기 / 가져오기 -->
+      <div class="space-y-2.5 pt-1">
+        <h4 class="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+          <i class="fa-solid fa-file-export text-indigo-600"></i> 파일로 백업 / 복원하기
+        </h4>
+        <p class="text-xs text-slate-500">별도 토큰 설정 없이 현재 기록을 파일로 내려받거나 다른 기기에서 불러올 수 있습니다.</p>
+        <div class="flex gap-2">
+          <button onclick="exportDataFile()" class="flex-1 py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5">
+            <i class="fa-solid fa-download"></i> 백업 파일 다운로드 (.json)
+          </button>
+          <label class="flex-1 py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer">
+            <i class="fa-solid fa-upload"></i> 백업 파일 불러오기
+            <input type="file" accept=".json" onchange="importDataFile(event)" class="hidden">
+          </label>
+        </div>
+      </div>
+
+      <div class="pt-2 border-t border-slate-100 flex justify-end">
+        <button onclick="closeSyncModal()" class="px-5 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition">
+          닫기
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 카테고리별 배지 색상
+    const categoryBadges = {
+      '운동': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      '학습': 'bg-indigo-50 text-indigo-700 border-indigo-200',
+      '생활': 'bg-amber-50 text-amber-700 border-amber-200',
+      '취미': 'bg-purple-50 text-purple-700 border-purple-200'
+    };
+
+    // 반복 주기(매일/주중/주말) 배지 설정
+    const frequencyMeta = {
+      'daily': { label: '매일', style: 'bg-slate-100 text-slate-600 border-slate-200' },
+      'weekdays': { label: '주중', style: 'bg-sky-50 text-sky-700 border-sky-200' },
+      'weekends': { label: '주말', style: 'bg-rose-50 text-rose-700 border-rose-200' }
+    };
+
+    // 날짜 유틸리티 함수 (로컬 시간 기준 YYYY-MM-DD)
+    function formatDateKey(date) {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+
+    function parseDateKey(dateStr) {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      return new Date(y, m - 1, d);
+    }
+
+    function addDays(date, days) {
+      const res = new Date(date);
+      res.setDate(res.getDate() + days);
+      return res;
+    }
+
+    function getMonday(date) {
+      const d = new Date(date);
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+      return new Date(d.getFullYear(), d.getMonth(), diff);
+    }
+
+    const todayDate = new Date();
+    const todayKey = formatDateKey(todayDate);
+    const yesterdayKey = formatDateKey(addDays(todayDate, -1));
+
+    // 상태 변수
+    let selectedDateKey = todayKey; 
+    let currentWeekMonday = getMonday(todayDate); 
+    let calendarViewYear = todayDate.getFullYear(); 
+    let calendarViewMonth = todayDate.getMonth(); 
+
+    let editingId = null;
+    let draggedIndex = null;
+    let deleteTargetHabitId = null;
+    let deleteTargetDateKey = null;
+
+    // GitHub Gist 동기화 설정 로드
+    let githubToken = localStorage.getItem('habit_gh_token') || '';
+    let githubGistId = localStorage.getItem('habit_gh_gist_id') || '';
+
+    // 특정 날짜가 목표의 반복 주기(매일/주중/주말)에 해당하는지 확인
+    function matchesFrequency(habit, dateKey) {
+      const freq = habit.frequency || 'daily';
+      if (freq === 'daily') return true;
+      const dayOfWeek = parseDateKey(dateKey).getDay(); // 0: 일, 6: 토
+      if (freq === 'weekdays') return dayOfWeek >= 1 && dayOfWeek <= 5;
+      if (freq === 'weekends') return dayOfWeek === 0 || dayOfWeek === 6;
+      return true;
+    }
+
+    // 특정 날짜(dateKey)에 해당 목표(habit)가 활성 상태인지 판별
+    function isHabitActiveOnDate(habit, dateKey) {
+      if (habit.startDate && dateKey < habit.startDate) return false;
+      if (habit.endDate && dateKey > habit.endDate) return false;
+      if (habit.excludedDates && habit.excludedDates[dateKey]) return false;
+      if (!matchesFrequency(habit, dateKey)) return false;
+      return true;
+    }
+
+    // 데이터 정규화
+    function normalizeHabits(list) {
+      if (!Array.isArray(list)) return [];
+      list.forEach(h => {
+        if (!h.records) h.records = {};
+        if (!h.excludedDates) h.excludedDates = {};
+        if (!h.startDate) h.startDate = '2000-01-01';
+        if (!h.frequency) h.frequency = 'daily';
+      });
+      return list;
+    }
+
+    // 데이터 로드
+    function loadHabitsData() {
+      const v2Data = localStorage.getItem('habit_tracker_v2');
+      if (v2Data) {
+        try {
+          return normalizeHabits(JSON.parse(v2Data));
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      const thisMonday = getMonday(todayDate);
+      const d0 = formatDateKey(thisMonday);
+      const d1 = formatDateKey(addDays(thisMonday, 1));
+      const d2 = formatDateKey(addDays(thisMonday, 2));
+
+      const defaultHabits = [
+        { id: 1, title: '퍼팅 & 스윙 빈스윙 연습 15분', category: '취미', frequency: 'daily', startDate: d0, endDate: null, excludedDates: {}, records: { [d0]: true, [d1]: true, [d2]: true } },
+        { id: 2, title: '개인 코딩 프로젝트 / 기술 문서 정리', category: '학습', frequency: 'weekdays', startDate: d0, endDate: null, excludedDates: {}, records: { [d0]: true, [d2]: true } },
+        { id: 3, title: '베란다 화분 상태 확인 및 환기', category: '생활', frequency: 'daily', startDate: d0, endDate: null, excludedDates: {}, records: { [d0]: true, [d1]: true, [d2]: true } },
+        { id: 4, title: '유산소 산책 40분', category: '운동', frequency: 'daily', startDate: d0, endDate: null, excludedDates: {}, records: { [d1]: true, [d2]: true } }
+      ];
+      localStorage.setItem('habit_tracker_v2', JSON.stringify(defaultHabits));
+      return defaultHabits;
+    }
+
+    let habits = loadHabitsData();
+
+    // 로컬 저장 + (Gist 연결 시 백그라운드 자동 업로드)
+    function saveData() {
+      localStorage.setItem('habit_tracker_v2', JSON.stringify(habits));
+      if (githubToken && githubGistId) {
+        autoPushToGist();
+      }
+    }
+
+    // 연속 달성(Streak) 계산
+    function calculateStreak(habit) {
+      const records = habit.records || {};
+      let streak = 0;
+      let checkDate = new Date(todayDate);
+
+      if (isHabitActiveOnDate(habit, todayKey) && !records[todayKey]) {
+        checkDate = addDays(checkDate, -1);
+      }
+
+      for (let i = 0; i < 3650; i++) {
+        const key = formatDateKey(checkDate);
+        if (habit.startDate && key < habit.startDate) break;
+
+        if (habit.endDate && key > habit.endDate) {
+          checkDate = addDays(checkDate, -1);
+          continue;
+        }
+
+        if ((habit.excludedDates && habit.excludedDates[key]) || !matchesFrequency(habit, key)) {
+          checkDate = addDays(checkDate, -1);
+          continue;
+        }
+
+        if (records[key]) {
+          streak++;
+          checkDate = addDays(checkDate, -1);
+        } else {
+          break;
+        }
+      }
+      return streak;
+    }
+
+    // 특정 날짜의 습관 달성 토글
+    function toggleDateRecord(habitId, dateKey) {
+      const habit = habits.find(h => h.id === habitId);
+      if (!habit || !isHabitActiveOnDate(habit, dateKey)) return;
+      if (!habit.records) habit.records = {};
+
+      if (habit.records[dateKey]) {
+        delete habit.records[dateKey];
+      } else {
+        habit.records[dateKey] = true;
+      }
+
+      selectedDateKey = dateKey;
+      const clickedDate = parseDateKey(dateKey);
+      calendarViewYear = clickedDate.getFullYear();
+      calendarViewMonth = clickedDate.getMonth();
+
+      saveData();
+      renderAll();
+    }
+
+    // 선택된 날짜 전체 완료 / 전체 해제
+    function batchToggleSelectedDate(makeCompleted) {
+      habits.forEach(habit => {
+        if (!isHabitActiveOnDate(habit, selectedDateKey)) return;
+        if (!habit.records) habit.records = {};
+        if (makeCompleted) {
+          habit.records[selectedDateKey] = true;
+        } else {
+          delete habit.records[selectedDateKey];
+        }
+      });
+      saveData();
+      renderAll();
+    }
+
+    // 캘린더에서 날짜 선택
+    function selectCalendarDate(dateKey) {
+      selectedDateKey = dateKey;
+      const d = parseDateKey(dateKey);
+      currentWeekMonday = getMonday(d);
+      calendarViewYear = d.getFullYear();
+      calendarViewMonth = d.getMonth();
+      renderAll();
+    }
+
+    // 주간 이동
+    function changeWeek(weekOffset) {
+      currentWeekMonday = addDays(currentWeekMonday, weekOffset * 7);
+      const thisMonday = getMonday(todayDate);
+      if (formatDateKey(currentWeekMonday) === formatDateKey(thisMonday)) {
+        selectedDateKey = todayKey;
+      } else {
+        selectedDateKey = formatDateKey(currentWeekMonday);
+      }
+      const d = parseDateKey(selectedDateKey);
+      calendarViewYear = d.getFullYear();
+      calendarViewMonth = d.getMonth();
+      renderAll();
+    }
+
+    // 캘린더 월 이동
+    function changeCalendarMonth(monthOffset) {
+      const d = new Date(calendarViewYear, calendarViewMonth + monthOffset, 1);
+      calendarViewYear = d.getFullYear();
+      calendarViewMonth = d.getMonth();
+      renderCalendar();
+    }
+
+    // 오늘 날짜로 복귀
+    function goToToday() {
+      selectedDateKey = todayKey;
+      currentWeekMonday = getMonday(todayDate);
+      calendarViewYear = todayDate.getFullYear();
+      calendarViewMonth = todayDate.getMonth();
+      renderAll();
+    }
+
+    // 현재 보고 있는 주간 기록만 초기화
+    function resetSelectedWeek() {
+      const sunday = addDays(currentWeekMonday, 6);
+      const rangeText = `${currentWeekMonday.getMonth()+1}/${currentWeekMonday.getDate()} ~ ${sunday.getMonth()+1}/${sunday.getDate()}`;
+      if (confirm(`현재 조회 중인 주간(${rangeText})의 체크 기록을 모두 초기화하시겠습니까?`)) {
+        for (let i = 0; i < 7; i++) {
+          const key = formatDateKey(addDays(currentWeekMonday, i));
+          habits.forEach(h => {
+            if (h.records && h.records[key]) {
+              delete h.records[key];
+            }
+          });
+        }
+        saveData();
+        renderAll();
+      }
+    }
+
+    // 새 목표 추가
+    document.getElementById('add-habit-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const input = document.getElementById('habit-input');
+      const category = document.getElementById('habit-category').value;
+      const frequency = document.getElementById('habit-frequency').value;
+      const title = input.value.trim();
+
+      if (title) {
+        habits.push({
+          id: Date.now(),
+          title: title,
+          category: category,
+          frequency: frequency,
+          startDate: todayKey,
+          endDate: null,
+          excludedDates: {},
+          records: {}
+        });
+        input.value = '';
+        saveData();
+        renderAll();
+      }
+    });
+
+    // 목표 수정 관련 함수
+    function startEdit(habitId) {
+      editingId = habitId;
+      renderAll();
+      const inputEl = document.getElementById(`edit-title-${habitId}`);
+      if (inputEl) {
+        inputEl.focus();
+        inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length);
+      }
+    }
+
+    function cancelEdit() {
+      editingId = null;
+      renderAll();
+    }
+
+    function saveEdit(habitId) {
+      const titleEl = document.getElementById(`edit-title-${habitId}`);
+      const categoryEl = document.getElementById(`edit-cat-${habitId}`);
+      const freqEl = document.getElementById(`edit-freq-${habitId}`);
+      if (!titleEl || !categoryEl || !freqEl) return;
+
+      const newTitle = titleEl.value.trim();
+      const newCategory = categoryEl.value;
+      const newFreq = freqEl.value;
+
+      if (!newTitle) {
+        alert('목표 이름을 입력해 주세요.');
+        titleEl.focus();
+        return;
+      }
+
+      const habit = habits.find(h => h.id === habitId);
+      if (habit) {
+        habit.title = newTitle;
+        habit.category = newCategory;
+        habit.frequency = newFreq;
+        editingId = null;
+        saveData();
+        renderAll();
+      }
+    }
+
+    function handleEditKeydown(event, habitId) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        saveEdit(habitId);
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        cancelEdit();
+      }
+    }
+
+    // 위치 이동
+    function moveHabit(habitId, direction) {
+      const index = habits.findIndex(h => h.id === habitId);
+      if (index === -1) return;
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= habits.length) return;
+      
+      const temp = habits[index];
+      habits[index] = habits[targetIndex];
+      habits[targetIndex] = temp;
+      
+      saveData();
+      renderAll();
+    }
+
+    // 드래그 앤 드롭
+    function handleDragStart(e, index) {
+      draggedIndex = index;
+      e.currentTarget.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    }
+    function handleDragOver(e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      e.currentTarget.classList.add('drag-over');
+    }
+    function handleDragLeave(e) {
+      e.currentTarget.classList.remove('drag-over');
+    }
+    function handleDrop(e, targetIndex) {
+      e.preventDefault();
+      e.currentTarget.classList.remove('drag-over');
+      if (draggedIndex === null || draggedIndex === targetIndex) return;
+      const movedItem = habits.splice(draggedIndex, 1)[0];
+      habits.splice(targetIndex, 0, movedItem);
+      draggedIndex = null;
+      saveData();
+      renderAll();
+    }
+    function handleDragEnd(e) {
+      e.currentTarget.classList.remove('dragging');
+      document.querySelectorAll('#habit-tbody tr').forEach(row => row.classList.remove('drag-over'));
+      draggedIndex = null;
+    }
+
+    // 삭제 모달
+    function openDeleteModal(habitId, targetDateKey) {
+      const habit = habits.find(h => h.id === habitId);
+      if (!habit) return;
+
+      deleteTargetHabitId = habitId;
+      deleteTargetDateKey = targetDateKey || selectedDateKey;
+
+      const d = parseDateKey(deleteTargetDateKey);
+      const dateStr = `${d.getMonth() + 1}월 ${d.getDate()}일`;
+      const isToday = (deleteTargetDateKey === todayKey);
+
+      document.getElementById('delete-modal-title').textContent = `'${habit.title}' 삭제`;
+      document.getElementById('delete-modal-desc').textContent = 
+        `원하시는 삭제 범위를 선택해 주세요. 당일만 제외하거나, 과거 기록을 보존한 채 오늘부터 종료할 수 있습니다.`;
+
+      document.getElementById('delete-opt-single-title').textContent = 
+        `당일(${dateStr}${isToday ? '·오늘' : ''}) 하루만 삭제`;
+      document.getElementById('delete-opt-single-desc').textContent = 
+        `${dateStr} 하루만 이 루틴을 제외하고 다른 날짜는 그대로 유지합니다.`;
+
+      const modal = document.getElementById('delete-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeDeleteModal() {
+      const modal = document.getElementById('delete-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+      deleteTargetHabitId = null;
+      deleteTargetDateKey = null;
+    }
+
+    function confirmDeleteOption(mode) {
+      const habit = habits.find(h => h.id === deleteTargetHabitId);
+      if (!habit) {
+        closeDeleteModal();
+        return;
+      }
+
+      if (mode === 'single') {
+        if (!habit.excludedDates) habit.excludedDates = {};
+        habit.excludedDates[deleteTargetDateKey] = true;
+        if (habit.records && habit.records[deleteTargetDateKey]) {
+          delete habit.records[deleteTargetDateKey];
+        }
+      } else if (mode === 'fromToday') {
+        if (habit.startDate && habit.startDate >= todayKey) {
+          habits = habits.filter(h => h.id !== habit.id);
+        } else {
+          habit.endDate = yesterdayKey;
+          if (habit.records) {
+            Object.keys(habit.records).forEach(k => {
+              if (k >= todayKey) delete habit.records[k];
+            });
+          }
+        }
+      } else if (mode === 'all') {
+        habits = habits.filter(h => h.id !== habit.id);
+      }
+
+      if (editingId === deleteTargetHabitId) editingId = null;
+      closeDeleteModal();
+      saveData();
+      renderAll();
+    }
+
+    // --- GitHub Gist 클라우드 동기화 및 파일 백업 기능 ---
+    function updateSyncUIStatus(statusText, isConnected) {
+      const badge = document.getElementById('sync-status-badge');
+      const btnText = document.getElementById('sync-btn-text');
+      const modalInd = document.getElementById('modal-sync-indicator');
+
+      if (isConnected) {
+        badge.className = 'md:hidden cursor-pointer px-2.5 py-1 text-[11px] font-semibold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1';
+        badge.innerHTML = `<i class="fa-solid fa-cloud-check"></i> ${statusText}`;
+        btnText.textContent = `클라우드 동기화됨`;
+        modalInd.className = 'text-[11px] font-semibold px-2 py-0.5 rounded bg-emerald-100 text-emerald-700';
+        modalInd.textContent = '연결됨';
+      } else {
+        badge.className = 'md:hidden cursor-pointer px-2.5 py-1 text-[11px] font-semibold rounded-full bg-slate-100 text-slate-600 flex items-center gap-1';
+        badge.innerHTML = `<i class="fa-solid fa-cloud"></i> 로컬 저장중`;
+        btnText.textContent = `동기화 / 백업`;
+        modalInd.className = 'text-[11px] font-semibold px-2 py-0.5 rounded bg-slate-200 text-slate-600';
+        modalInd.textContent = '미연결';
+      }
+    }
+
+    function openSyncModal() {
+      document.getElementById('github-token-input').value = githubToken;
+      document.getElementById('github-gist-input').value = githubGistId;
+      document.getElementById('sync-log-msg').classList.add('hidden');
+      const modal = document.getElementById('sync-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeSyncModal() {
+      const modal = document.getElementById('sync-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function showSyncMessage(msg, isError = false) {
+      const el = document.getElementById('sync-log-msg');
+      el.textContent = msg;
+      el.className = `text-xs font-semibold pt-1 ${isError ? 'text-rose-600' : 'text-emerald-600'}`;
+      el.classList.remove('hidden');
+    }
+
+    async function saveAndCreateGist() {
+      const token = document.getElementById('github-token-input').value.trim();
+      let gistId = document.getElementById('github-gist-input').value.trim();
+
+      if (!token) {
+        showSyncMessage('GitHub Personal Access Token을 입력해 주세요.', true);
+        return;
+      }
+
+      githubToken = token;
+      localStorage.setItem('habit_gh_token', githubToken);
+      showSyncMessage('GitHub 클라우드에 저장 중입니다...');
+
+      try {
+        const payload = {
+          description: "Habit Tracker Dashboard Data Sync",
+          public: false,
+          files: {
+            "habit_data.json": {
+              content: JSON.stringify(habits, null, 2)
+            }
+          }
+        };
+
+        const url = gistId ? `https://api.github.com/gists/${gistId}` : `https://api.github.com/gists`;
+        const method = gistId ? 'PATCH' : 'POST';
+
+        const res = await fetch(url, {
+          method: method,
+          headers: {
+            'Authorization': `token ${githubToken}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) throw new Error('API 요청 실패 (토큰 권한이나 Gist ID를 확인해 주세요)');
+        const data = await res.json();
+
+        githubGistId = data.id;
+        localStorage.setItem('habit_gh_gist_id', githubGistId);
+        document.getElementById('github-gist-input').value = githubGistId;
+
+        updateSyncUIStatus('동기화 완료', true);
+        showSyncMessage(`클라우드 저장 완료! (Gist ID: ${githubGistId}) 다른 기기에서도 이 ID를 입력하면 연동됩니다.`);
+      } catch (err) {
+        showSyncMessage(err.message, true);
+      }
+    }
+
+    async function pullFromGist(silent = false) {
+      const token = (document.getElementById('github-token-input')?.value.trim()) || githubToken;
+      const gistId = (document.getElementById('github-gist-input')?.value.trim()) || githubGistId;
+
+      if (!token || !gistId) {
+        if (!silent) showSyncMessage('불러오려면 Token과 Gist ID가 모두 필요합니다.', true);
+        return;
+      }
+
+      githubToken = token;
+      githubGistId = gistId;
+      localStorage.setItem('habit_gh_token', githubToken);
+      localStorage.setItem('habit_gh_gist_id', githubGistId);
+
+      if (!silent) showSyncMessage('클라우드에서 데이터를 불러오는 중...');
+
+      try {
+        const res = await fetch(`https://api.github.com/gists/${gistId}`, {
+          headers: {
+            'Authorization': `token ${githubToken}`,
+            'Accept': 'application/vnd.github.v3+json'
+          }
+        });
+        if (!res.ok) throw new Error('Gist 데이터를 불러오지 못했습니다.');
+        const data = await res.json();
+        if (data.files && data.files["habit_data.json"]) {
+          const remoteHabits = JSON.parse(data.files["habit_data.json"].content);
+          habits = normalizeHabits(remoteHabits);
+          localStorage.setItem('habit_tracker_v2', JSON.stringify(habits));
+          renderAll();
+          updateSyncUIStatus('동기화됨', true);
+          if (!silent) showSyncMessage('클라우드 데이터를 성공적으로 불러왔습니다!');
+        }
+      } catch (err) {
+        if (!silent) showSyncMessage(err.message, true);
+      }
+    }
+
+    async function autoPushToGist() {
+      try {
+        await fetch(`https://api.github.com/gists/${githubGistId}`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `token ${githubToken}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            files: {
+              "habit_data.json": { content: JSON.stringify(habits, null, 2) }
+            }
+          })
+        });
+        updateSyncUIStatus('동기화됨', true);
+      } catch (e) {
+        console.warn('Auto sync failed:', e);
+      }
+    }
+
+    // JSON 파일 다운로드 백업
+    function exportDataFile() {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(habits, null, 2));
+      const dlAnchor = document.createElement('a');
+      dlAnchor.setAttribute("href", dataStr);
+      dlAnchor.setAttribute("download", `habit_backup_${todayKey}.json`);
+      document.body.appendChild(dlAnchor);
+      dlAnchor.click();
+      dlAnchor.remove();
+    }
+
+    // JSON 파일 업로드 복원
+    function importDataFile(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const imported = JSON.parse(e.target.result);
+          if (Array.isArray(imported)) {
+            habits = normalizeHabits(imported);
+            saveData();
+            renderAll();
+            showSyncMessage('백업 파일이 성공적으로 복원되었습니다!');
+          } else {
+            alert('올바른 백업 파일 형식이 아닙니다.');
+          }
+        } catch (err) {
+          alert('파일을 읽는 중 오류가 발생했습니다.');
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    // 1. 주간 매트릭스 및 상단 KPI 렌더링
+    function renderWeeklyMatrixAndKPI() {
+      const options = { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' };
+      document.getElementById('current-date-display').textContent = `오늘: ${todayDate.toLocaleDateString('ko-KR', options)}`;
+
+      const weekDates = [];
+      const dayNames = ['월', '화', '수', '목', '금', '토', '일'];
+      for (let i = 0; i < 7; i++) {
+        const d = addDays(currentWeekMonday, i);
+        const key = formatDateKey(d);
+        weekDates.push({ date: d, key: key, dayName: dayNames[i] });
+
+        const headerEl = document.getElementById(`day-header-${i}`);
+        const isToday = (key === todayKey);
+        const isSelected = (key === selectedDateKey);
+        const dateNum = `${d.getMonth() + 1}/${d.getDate()}`;
+
+        if (isToday) {
+          headerEl.innerHTML = `
+            <div class="cursor-pointer" onclick="selectCalendarDate('${key}')">
+              <span class="inline-block bg-indigo-600 text-white rounded-md px-1.5 py-0.5 text-[10px] sm:text-[11px] font-bold">${dayNames[i]}</span>
+              <div class="text-[10px] sm:text-[11px] font-bold text-indigo-600 mt-0.5">${dateNum}</div>
+            </div>`;
+        } else if (isSelected) {
+          headerEl.innerHTML = `
+            <div class="cursor-pointer" onclick="selectCalendarDate('${key}')">
+              <span class="inline-block bg-indigo-100 text-indigo-700 rounded-md px-1.5 py-0.5 text-[10px] sm:text-[11px] font-bold">${dayNames[i]}</span>
+              <div class="text-[10px] sm:text-[11px] font-bold text-indigo-600 mt-0.5">${dateNum}</div>
+            </div>`;
+        } else {
+          headerEl.innerHTML = `
+            <div class="cursor-pointer hover:text-indigo-600 transition" onclick="selectCalendarDate('${key}')">
+              <div>${dayNames[i]}</div>
+              <div class="text-[10px] font-normal text-slate-400 mt-0.5">${dateNum}</div>
+            </div>`;
+        }
+      }
+
+      const firstD = weekDates[0].date;
+      const lastD = weekDates[6].date;
+      const isCurrentThisWeek = (formatDateKey(currentWeekMonday) === formatDateKey(getMonday(todayDate)));
+      document.getElementById('week-range-label').textContent = 
+        `${firstD.getFullYear()}년 ${firstD.getMonth()+1}월 ${firstD.getDate()}일 ~ ${lastD.getMonth()+1}월 ${lastD.getDate()}일 ${isCurrentThisWeek ? '(이번 주)' : ''}`;
+      document.getElementById('weekly-kpi-title').textContent = isCurrentThisWeek ? '이번 주 달성' : '조회 주간 달성';
+
+      const tbody = document.getElementById('habit-tbody');
+      const emptyState = document.getElementById('empty-state');
+      tbody.innerHTML = '';
+
+      let todayActiveTotal = 0;
+      let todayCompleted = 0;
+      let bestStreak = 0;
+      let bestHabitName = '기록 없음';
+
+      habits.forEach(habit => {
+        if (isHabitActiveOnDate(habit, todayKey)) {
+          todayActiveTotal++;
+          if (habit.records && habit.records[todayKey]) todayCompleted++;
+        }
+        const streak = calculateStreak(habit);
+        if (streak > bestStreak) {
+          bestStreak = streak;
+          bestHabitName = habit.title;
+        }
+      });
+
+      const visibleWeekHabits = habits.filter(habit => 
+        weekDates.some(wd => isHabitActiveOnDate(habit, wd.key))
+      );
+
+      if (visibleWeekHabits.length === 0) {
+        emptyState.classList.remove('hidden');
+      } else {
+        emptyState.classList.add('hidden');
+      }
+
+      let weeklyCompleted = 0;
+      let weeklyPossible = 0;
+
+      visibleWeekHabits.forEach((habit) => {
+        const realIndex = habits.findIndex(h => h.id === habit.id);
+        if (!habit.records) habit.records = {};
+
+        let weekCount = 0;
+        let activeDaysInWeek = 0;
+
+        weekDates.forEach(wd => {
+          if (isHabitActiveOnDate(habit, wd.key)) {
+            activeDaysInWeek++;
+            if (habit.records[wd.key]) weekCount++;
+          }
+        });
+
+        weeklyCompleted += weekCount;
+        weeklyPossible += activeDaysInWeek;
+        const progressPercent = activeDaysInWeek > 0 ? Math.round((weekCount / activeDaysInWeek) * 100) : 0;
+        const streak = calculateStreak(habit);
+
+        const badgeClass = categoryBadges[habit.category] || 'bg-slate-100 text-slate-700';
+        const freqInfo = frequencyMeta[habit.frequency || 'daily'] || frequencyMeta['daily'];
+        const isEditing = (editingId === habit.id);
+
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-50/80 transition group';
+
+        if (!isEditing) {
+          tr.draggable = true;
+          tr.addEventListener('dragstart', (e) => handleDragStart(e, realIndex));
+          tr.addEventListener('dragover', handleDragOver);
+          tr.addEventListener('dragleave', handleDragLeave);
+          tr.addEventListener('drop', (e) => handleDrop(e, realIndex));
+          tr.addEventListener('dragend', handleDragEnd);
+        }
+
+        let checkButtonsHTML = '';
+        weekDates.forEach(wd => {
+          const isActive = isHabitActiveOnDate(habit, wd.key);
+          const isChecked = isActive && !!habit.records[wd.key];
+          const isToday = (wd.key === todayKey);
+          const isSelected = (wd.key === selectedDateKey);
+
+          if (!isActive) {
+            checkButtonsHTML += `
+              <td class="py-3 px-1 text-center">
+                <span class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl inline-flex items-center justify-center bg-slate-50 text-slate-300 text-xs select-none">
+                  -
+                </span>
+              </td>
+            `;
+          } else {
+            let btnStyle = '';
+            if (isChecked) {
+              btnStyle = 'bg-indigo-600 text-white shadow-sm shadow-indigo-200';
+            } else if (isToday) {
+              btnStyle = 'bg-indigo-50/70 text-slate-300 border-2 border-indigo-400 border-dashed hover:border-indigo-600';
+            } else if (isSelected) {
+              btnStyle = 'bg-slate-100 text-slate-300 ring-2 ring-indigo-300 hover:bg-slate-200';
+            } else {
+              btnStyle = 'bg-slate-100 text-slate-300 hover:bg-slate-200';
+            }
+
+            checkButtonsHTML += `
+              <td class="py-3 px-1 text-center">
+                <button onclick="toggleDateRecord(${habit.id}, '${wd.key}')" 
+                  class="check-btn w-8 h-8 sm:w-9 sm:h-9 rounded-xl inline-flex items-center justify-center ${btnStyle}">
+                  <i class="fa-solid fa-check text-xs sm:text-sm ${isChecked ? 'opacity-100' : 'opacity-0'}"></i>
+                </button>
+              </td>
+            `;
+          }
+        });
+
+        let titleCellHTML = '';
+        if (isEditing) {
+          const curFreq = habit.frequency || 'daily';
+          titleCellHTML = `
+            <div class="flex flex-wrap items-center gap-1.5">
+              <select id="edit-cat-${habit.id}" class="px-2 py-1.5 bg-white border border-indigo-300 rounded-lg text-xs font-semibold text-slate-700">
+                <option value="운동" ${habit.category === '운동' ? 'selected' : ''}>운동</option>
+                <option value="학습" ${habit.category === '학습' ? 'selected' : ''}>학습</option>
+                <option value="생활" ${habit.category === '생활' ? 'selected' : ''}>생활</option>
+                <option value="취미" ${habit.category === '취미' ? 'selected' : ''}>취미</option>
+              </select>
+              <select id="edit-freq-${habit.id}" class="px-2 py-1.5 bg-white border border-indigo-300 rounded-lg text-xs font-semibold text-slate-700">
+                <option value="daily" ${curFreq === 'daily' ? 'selected' : ''}>매일</option>
+                <option value="weekdays" ${curFreq === 'weekdays' ? 'selected' : ''}>주중</option>
+                <option value="weekends" ${curFreq === 'weekends' ? 'selected' : ''}>주말</option>
+              </select>
+              <input type="text" id="edit-title-${habit.id}" value="${habit.title.replace(/"/g, '&quot;')}" 
+                onkeydown="handleEditKeydown(event, ${habit.id})"
+                class="flex-1 min-w-[130px] px-2.5 py-1.5 bg-white border border-indigo-300 rounded-lg text-xs sm:text-sm font-medium text-slate-800">
+            </div>
+          `;
+        } else {
+          const startBadge = (habit.startDate && habit.startDate > '2000-01-01') 
+            ? `<span class="text-[10px] text-slate-400 font-normal ml-1">(${habit.startDate.slice(5)}~)</span>` 
+            : '';
+          titleCellHTML = `
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="px-1.5 py-0.5 text-[11px] font-semibold rounded-md border shrink-0 ${badgeClass}">${habit.category}</span>
+              <span class="px-1.5 py-0.5 text-[10px] font-semibold rounded-md border shrink-0 ${freqInfo.style}">${freqInfo.label}</span>
+              <span class="font-medium text-slate-800 break-all cursor-pointer ml-0.5 text-xs sm:text-sm" ondblclick="startEdit(${habit.id})">
+                ${habit.title}${startBadge}
+              </span>
+            </div>
+          `;
+        }
+
+        let actionCellHTML = '';
+        if (isEditing) {
+          actionCellHTML = `
+            <div class="flex items-center justify-center gap-1">
+              <button onclick="saveEdit(${habit.id})" class="px-2 py-1 bg-indigo-600 text-white text-xs font-semibold rounded-lg">저장</button>
+              <button onclick="cancelEdit()" class="px-2 py-1 bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg">취소</button>
+            </div>
+          `;
+        } else {
+          const isFirst = (realIndex === 0);
+          const isLast = (realIndex === habits.length - 1);
+          actionCellHTML = `
+            <div class="flex items-center justify-center gap-0.5 sm:gap-1">
+              <button onclick="moveHabit(${habit.id}, -1)" ${isFirst ? 'disabled' : ''} 
+                class="p-1.5 rounded-lg transition ${isFirst ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'}">
+                <i class="fa-solid fa-chevron-up text-xs"></i>
+              </button>
+              <button onclick="moveHabit(${habit.id}, 1)" ${isLast ? 'disabled' : ''} 
+                class="p-1.5 rounded-lg transition ${isLast ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'}">
+                <i class="fa-solid fa-chevron-down text-xs"></i>
+              </button>
+              <button onclick="startEdit(${habit.id})" 
+                class="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition">
+                <i class="fa-solid fa-pen text-xs"></i>
+              </button>
+              <button onclick="openDeleteModal(${habit.id}, '${selectedDateKey}')" 
+                class="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition">
+                <i class="fa-solid fa-trash-can text-xs"></i>
+              </button>
+            </div>
+          `;
+        }
+
+        tr.innerHTML = `
+          <td class="py-3.5 pl-3 pr-1 text-center cursor-grab active:cursor-grabbing text-slate-300 group-hover:text-slate-400 hidden sm:table-cell">
+            <i class="fa-solid fa-grip-vertical"></i>
+          </td>
+          <td class="py-3.5 px-3">${titleCellHTML}</td>
+          ${checkButtonsHTML}
+          <td class="py-3.5 px-2 text-center">
+            <span class="inline-flex items-center gap-1 font-bold text-xs sm:text-sm ${streak > 0 ? 'text-orange-500' : 'text-slate-400'}">
+              <i class="fa-solid fa-fire"></i> ${streak}회
+            </span>
+          </td>
+          <td class="py-3.5 px-2">
+            <div class="flex items-center gap-1.5">
+              <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                <div class="bg-emerald-500 h-full rounded-full transition-all duration-300" style="width: ${progressPercent}%"></div>
+              </div>
+              <span class="text-[11px] font-semibold text-slate-500 w-8 text-right">${weekCount}/${activeDaysInWeek}</span>
+            </div>
+          </td>
+          <td class="py-3.5 px-3 text-center">${actionCellHTML}</td>
+        `;
+
+        tbody.appendChild(tr);
+      });
+
+      const todayRate = todayActiveTotal > 0 ? Math.round((todayCompleted / todayActiveTotal) * 100) : 0;
+      const weeklyRate = weeklyPossible > 0 ? Math.round((weeklyCompleted / weeklyPossible) * 100) : 0;
+
+      document.getElementById('today-rate').textContent = `${todayRate}%`;
+      document.getElementById('today-count').textContent = `(${todayCompleted}/${todayActiveTotal})`;
+      document.getElementById('weekly-rate').textContent = `${weeklyRate}%`;
+      document.getElementById('weekly-count').textContent = `(${weeklyCompleted}/${weeklyPossible})`;
+      document.getElementById('best-streak').textContent = `${bestStreak}회`;
+      document.getElementById('best-habit-name').textContent = bestStreak > 0 ? bestHabitName : '기록 없음';
+    }
+
+    // 2. 월간 캘린더 렌더링
+    function renderCalendar() {
+      document.getElementById('calendar-month-title').textContent = `${calendarViewYear}년 ${calendarViewMonth + 1}월`;
+      const grid = document.getElementById('calendar-grid');
+      grid.innerHTML = '';
+
+      const firstDayOfMonth = new Date(calendarViewYear, calendarViewMonth, 1).getDay();
+      const daysInMonth = new Date(calendarViewYear, calendarViewMonth + 1, 0).getDate();
+
+      for (let i = 0; i < firstDayOfMonth; i++) {
+        const emptyDiv = document.createElement('div');
+        emptyDiv.className = 'h-12 sm:h-14 rounded-xl bg-slate-50/40';
+        grid.appendChild(emptyDiv);
+      }
+
+      for (let day = 1; day <= daysInMonth; day++) {
+        const d = new Date(calendarViewYear, calendarViewMonth, day);
+        const key = formatDateKey(d);
+        const isToday = (key === todayKey);
+        const isSelected = (key === selectedDateKey);
+
+        const activeHabits = habits.filter(h => isHabitActiveOnDate(h, key));
+        const activeTotal = activeHabits.length;
+        let completedCount = 0;
+
+        activeHabits.forEach(h => {
+          if (h.records && h.records[key]) completedCount++;
+        });
+
+        let bgStyle = 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200/70';
+        let badgeStyle = 'text-slate-400';
+
+        if (activeTotal > 0 && completedCount === activeTotal) {
+          bgStyle = 'bg-emerald-500 hover:bg-emerald-600 text-white border border-emerald-600 shadow-sm';
+          badgeStyle = 'text-emerald-100 font-semibold';
+        } else if (completedCount > 0) {
+          bgStyle = 'bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200';
+          badgeStyle = 'text-indigo-600 font-semibold';
+        }
+
+        const ringStyle = isSelected ? 'ring-2 ring-indigo-600 ring-offset-1 font-bold' : '';
+
+        const cell = document.createElement('button');
+        cell.type = 'button';
+        cell.onclick = () => selectCalendarDate(key);
+        cell.className = `cal-day h-12 sm:h-14 p-1 sm:p-1.5 rounded-xl flex flex-col justify-between items-center ${bgStyle} ${ringStyle}`;
+
+        cell.innerHTML = `
+          <div class="w-full flex items-center justify-between px-0.5 sm:px-1">
+            <span class="text-[11px] sm:text-xs ${isToday && (activeTotal === 0 || completedCount < activeTotal) ? 'text-indigo-600 font-extrabold underline' : ''}">${day}</span>
+            ${isToday ? `<span class="w-1.5 h-1.5 rounded-full ${activeTotal > 0 && completedCount === activeTotal ? 'bg-white' : 'bg-indigo-600'}"></span>` : ''}
+          </div>
+          <div class="text-[9px] sm:text-[10px] ${badgeStyle}">
+            ${activeTotal > 0 ? `${completedCount}/${activeTotal}` : '-'}
+          </div>
+        `;
+
+        grid.appendChild(cell);
+      }
+    }
+
+    // 3. 우측 선택된 날짜 상세 수정 패널 렌더링
+    function renderSelectedDateEditor() {
+      const selDate = parseDateKey(selectedDateKey);
+      const options = { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' };
+      const isToday = (selectedDateKey === todayKey);
+      
+      document.getElementById('selected-date-title').innerHTML = `
+        ${selDate.toLocaleDateString('ko-KR', options)}
+        ${isToday ? '<span class="ml-1.5 text-xs px-2 py-0.5 bg-indigo-600 text-white rounded-md font-semibold">오늘</span>' : ''}
+      `;
+
+      const listContainer = document.getElementById('selected-date-list');
+      listContainer.innerHTML = '';
+
+      const activeHabits = habits.filter(h => isHabitActiveOnDate(h, selectedDateKey));
+      let completed = 0;
+      const total = activeHabits.length;
+
+      if (total === 0) {
+        listContainer.innerHTML = `<div class="py-8 text-center text-xs text-slate-400">이 날짜(요일)에 해당하는 목표가 없습니다.</div>`;
+      } else {
+        activeHabits.forEach(habit => {
+          const isChecked = !!(habit.records && habit.records[selectedDateKey]);
+          if (isChecked) completed++;
+
+          const badgeClass = categoryBadges[habit.category] || 'bg-slate-100 text-slate-700';
+          const freqInfo = frequencyMeta[habit.frequency || 'daily'] || frequencyMeta['daily'];
+
+          const item = document.createElement('div');
+          item.className = `p-3 rounded-xl border transition flex items-center justify-between gap-2 ${
+            isChecked 
+              ? 'bg-indigo-50/60 border-indigo-200 text-indigo-950' 
+              : 'bg-slate-50/70 border-slate-200/80 text-slate-700 hover:bg-slate-100/80'
+          }`;
+
+          item.innerHTML = `
+            <div onclick="toggleDateRecord(${habit.id}, '${selectedDateKey}')" class="flex items-center gap-2 min-w-0 flex-1 cursor-pointer py-0.5">
+              <div class="w-5 h-5 rounded-md flex items-center justify-center shrink-0 transition ${
+                isChecked ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-300 text-transparent'
+              }">
+                <i class="fa-solid fa-check text-[11px]"></i>
+              </div>
+              <span class="px-1.5 py-0.5 text-[11px] font-semibold rounded border shrink-0 ${badgeClass}">${habit.category}</span>
+              <span class="px-1.5 py-0.5 text-[10px] font-semibold rounded border shrink-0 ${freqInfo.style}">${freqInfo.label}</span>
+              <span class="text-xs sm:text-sm font-medium truncate ${isChecked ? 'line-through text-slate-400' : 'text-slate-800'}">${habit.title}</span>
+            </div>
+            <button onclick="openDeleteModal(${habit.id}, '${selectedDateKey}')" 
+              class="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition shrink-0" title="이 목표 삭제 옵션">
+              <i class="fa-solid fa-trash-can text-xs"></i>
+            </button>
+          `;
+
+          listContainer.appendChild(item);
+        });
+      }
+
+      const badgeEl = document.getElementById('selected-date-badge');
+      badgeEl.textContent = `${completed} / ${total} 완료`;
+      if (total > 0 && completed === total) {
+        badgeEl.className = 'px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 shrink-0';
+      } else {
+        badgeEl.className = 'px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-600 shrink-0';
+      }
+    }
+
+    function renderAll() {
+      renderWeeklyMatrixAndKPI();
+      renderCalendar();
+      renderSelectedDateEditor();
+    }
+
+    // 초기 실행 및 클라우드 자동 동기화 체크
+    renderAll();
+    if (githubToken && githubGistId) {
+      updateSyncUIStatus('동기화 연결됨', true);
+      pullFromGist(true);
+    }
+  </script>
+</body>
+</html>
